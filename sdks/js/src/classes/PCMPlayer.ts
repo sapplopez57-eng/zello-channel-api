@@ -90,6 +90,14 @@ class PCMPlayer {
   private destroyed = false;
 
   /**
+   * BufferSourceNodes that have been scheduled on the audio timeline and
+   * have not yet fired their `onended` event. Tracked so {@link reset} can
+   * stop them immediately, cancelling audio that is either actively
+   * playing or scheduled to play in the future.
+   */
+  private activeSources: Set<AudioBufferSourceNode> = new Set();
+
+  /**
    * AbortController used to cancel an in-flight {@link webAudioTouchUnlock}
    * promise when {@link destroy} runs before the first user gesture. Non-null
    * only while a touch unlock is pending; cleared on resolution, rejection,
@@ -227,6 +235,44 @@ class PCMPlayer {
   }
 
   /**
+   * Updates the flush cadence in milliseconds. Cancels any pending flush
+   * timer and reschedules one at the new cadence, re-anchoring the
+   * drift-correction clock so the next flush fires one new-cadence tick
+   * from now rather than catching up or stalling at the old rate.
+   *
+   * If called before {@link init} has finished (including while init is
+   * awaiting the first user gesture via {@link webAudioTouchUnlock}),
+   * only the option is updated and the first flush scheduled by init()
+   * uses the new value. Non-positive or non-finite values are ignored.
+   *
+   * @param flushingTime The new flush cadence in milliseconds.
+   */
+  public setFlushingTime(flushingTime: number) {
+    if (this.destroyed) {
+      return;
+    }
+    if (!Number.isFinite(flushingTime) || flushingTime <= 0) {
+      return;
+    }
+    this.options.flushingTime = flushingTime;
+    if (!this.gainNode) {
+      // `audioCtx` alone is not a reliable "initialized" signal because
+      // init() sets it early (before `await webAudioTouchUnlock`). Gate
+      // on `gainNode`, which init() only sets after the unlock resolves,
+      // so a call during the await does not schedule a flush that init()
+      // will later duplicate without clearing.
+      return;
+    }
+    const elapsedMs = Date.now() - this.startTimestampMs;
+    this.flushTimeSyncMs = elapsedMs + flushingTime;
+    if (this.flushTimer !== null) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    this.scheduleFlush(flushingTime);
+  }
+
+  /**
    * Mutes or unmutes the player. When muted, calls to feed() are ignored.
    * @param isMuted Whether the player should be muted.
    */
@@ -235,9 +281,45 @@ class PCMPlayer {
   }
 
   /**
-   * Clears all buffered sample data and resets the feed counter.
+   * Clears all buffered sample data and resets the feed counter. Also
+   * stops any BufferSourceNodes that were scheduled on the audio timeline
+   * but have not yet finished playing, cancelling both actively-playing
+   * audio and audio queued to play in the future. Each source's
+   * `onended` handler is cleared before `stop()` so no stale
+   * {@link OnEndedCallback} fires against the caller after reset. If
+   * `audioCtx` is present, `reset()` immediately re-anchors
+   * {@link startTime} to `audioCtx.currentTime`.
+   *
+   * This makes `reset()` a true "cancel playback and start fresh"
+   * operation for consumers that reuse a single player across multiple
+   * logical owners.
    */
   public reset() {
+    this.clearBuffers();
+    for (const source of this.activeSources) {
+      source.onended = null;
+      try {
+        source.stop();
+      } catch {
+        // stop() throws InvalidStateError if the source never started.
+        // All tracked sources were started via source.start() in flush(),
+        // so this is defensive.
+      }
+      source.disconnect();
+    }
+    this.activeSources.clear();
+    if (this.audioCtx) {
+      this.startTime = this.audioCtx.currentTime;
+    }
+  }
+
+  /**
+   * Clears pending input buffers without touching scheduled playback.
+   * Used internally by {@link flush} to drain chunks after they have
+   * been concatenated into an AudioBuffer. Public {@link reset} builds
+   * on this to also cancel scheduled audio.
+   */
+  private clearBuffers() {
     this.chunks = [];
     this.totalSamples = 0;
     this.feedCounter = 0;
@@ -318,7 +400,7 @@ class PCMPlayer {
     const samples = this.concatenateChunks();
     const capturedFeedCount = this.feedCounter;
 
-    this.reset();
+    this.clearBuffers();
 
     const { channels, sampleRate } = this.options;
     const length = (samples.length / channels) | 0;
@@ -342,8 +424,11 @@ class PCMPlayer {
     source.connect(this.gainNode);
     source.start(this.startTime);
 
+    this.activeSources.add(source);
+
     const callback = this.onEndedCallback;
     source.onended = () => {
+      this.activeSources.delete(source);
       source.disconnect();
       if (callback) {
         callback(capturedFeedCount);
