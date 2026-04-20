@@ -78,6 +78,7 @@ Connecting to multiple channels (up to 100) is currently supported for Zello Wor
 | `platform_type` | string | (optional) Client platform type, any string
 | `platform_name` | string | (optional) Client platform name, any string. If includes `Gateway` or `Kiosk` (case-insensitive), the Zello Alarms service will track the online status of this client.
 | `language`      | string | (optional) Client ISO 639-1 language code. Required for translation channels.
+| `features`      | object | (optional) Feature flags object. Include `transcriptions` as a boolean (for example `{"transcriptions": true}`) to enable voice message transcriptions; when enabled, the server emits `on_transcription` events for voice streams.
 
 ### Zello Work
 
@@ -88,7 +89,10 @@ Connecting to multiple channels (up to 100) is currently supported for Zello Wor
   "seq": 1,
   "username": "sherlock",
   "password": "secret",
-  "channels": ["Baker Street 221B", "Reichenbach Falls"]
+  "channels": ["Baker Street 221B", "Reichenbach Falls"],
+  "features": {
+    "transcriptions": true
+  }
 }
 ``` 
 #### Response:
@@ -472,8 +476,7 @@ Indicates the stop of the incoming stream. This event corresponds to `stop_strea
 ```
 
 ### `on_transcription`
-Transcriptions, when enabled on the Zello Work network, will be delivered for incoming and outgoing messages. They will contain a `stream_id` which
-matches the `stream_id` of a voice message. Transcriptions will happen automatically for completed messages, or when a message hits the one-minute mark.
+Request transcriptions by including `features` on `logon` with `transcriptions` set to `true`. When transcriptions are enabled and supported by the network, the server delivers this event for voice messages (incoming and outgoing on Zello Work). Each event includes a `stream_id` that matches the `stream_id` of the voice stream. Transcriptions are sent for completed messages, or when a message reaches the one-minute mark.
 
 #### Attributes
 
