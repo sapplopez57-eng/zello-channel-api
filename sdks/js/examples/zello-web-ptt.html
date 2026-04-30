@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zello Web PTT - Push to Talk</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 15px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .ptt-button {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(145deg, #ff6b6b, #ee5a5a);
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 8px 25px rgba(238, 90, 90, 0.5);
+            transition: all 0.1s ease;
+            margin: 30px auto;
+            display: block;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .ptt-button:active,
+        .ptt-button.recording {
+            transform: scale(0.95);
+            background: linear-gradient(145deg, #ff5252, #e04040);
+            box-shadow: 0 4px 15px rgba(224, 64, 64, 0.7);
+        }
+
+        .ptt-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            text-align: center;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .status.disconnected {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .status.connecting {
+            background: #fff3e0;
+            color: #ef6c00;
+        }
+
+        .status.connected {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .status.transmitting {
+            background: #fce4ec;
+            color: #c2185b;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .messages {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            background: #fafafa;
+        }
+
+        .message {
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            font-size: 13px;
+        }
+
+        .message.info {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+
+        .message.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .message.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .message.warning {
+            background: #fff3e0;
+            color: #ef6c00;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .config-section {
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .config-section h3 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 16px;
+        }
+
+        .help-text {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .checkbox-group label {
+            margin: 0;
+            cursor: pointer;
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Zello Web PTT</h1>
+        <p class="subtitle">Push-to-Talk para tu red Zello</p>
+
+        <!-- Configuración -->
+        <div id="configSection" class="config-section">
+            <h3>⚙️ Configuración de Conexión</h3>
+            
+            <div class="form-group">
+                <label for="network">Nombre de la Red Zello:</label>
+                <input type="text" id="network" placeholder="ej: mi-red-zello">
+                <p class="help-text">El nombre de tu red en Zello Work</p>
+            </div>
+
+            <div class="form-group">
+                <label for="channel">Canal:</label>
+                <input type="text" id="channel" placeholder="ej: CANAL1">
+            </div>
+
+            <div class="form-group">
+                <label for="username">Usuario:</label>
+                <input type="text" id="username" placeholder="Usuario del canal">
+            </div>
+
+            <div class="form-group">
+                <label for="password">Contraseña:</label>
+                <input type="password" id="password" placeholder="Contraseña del usuario">
+            </div>
+
+            <div class="form-group">
+                <label for="authToken">Auth Token (opcional):</label>
+                <textarea id="authToken" placeholder="Pega aquí tu authToken desde Zello Work Console"></textarea>
+                <p class="help-text">Si tienes un authToken, úsalo. Si no, deja vacío y usa usuario/contraseña</p>
+            </div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="rememberConfig" checked>
+                <label for="rememberConfig">Recordar configuración en este navegador</label>
+            </div>
+
+            <button class="btn btn-primary" id="connectBtn">Conectar a Zello</button>
+        </div>
+
+        <!-- Estado -->
+        <div id="status" class="status disconnected hidden">
+            Desconectado
+        </div>
+
+        <!-- Botón PTT -->
+        <button class="ptt-button hidden" id="pttButton" disabled>
+            PUSH<br>TALK
+        </button>
+
+        <!-- Mensajes -->
+        <div class="messages hidden" id="messagesContainer">
+            <div class="message info">Esperando conexión...</div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/zello-channel-api@latest/sdks/js/zello-channel-sdk.js"></script>
+    
+    <script>
+        // Variables globales
+        let session = null;
+        let outgoingMessage = null;
+        let isConnected = false;
+
+        // Elementos DOM
+        const configSection = document.getElementById('configSection');
+        const statusDiv = document.getElementById('status');
+        const pttButton = document.getElementById('pttButton');
+        const messagesContainer = document.getElementById('messagesContainer');
+        const connectBtn = document.getElementById('connectBtn');
+
+        // Inputs
+        const networkInput = document.getElementById('network');
+        const channelInput = document.getElementById('channel');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        const authTokenInput = document.getElementById('authToken');
+        const rememberCheckbox = document.getElementById('rememberConfig');
+
+        // Cargar configuración guardada
+        function loadSavedConfig() {
+            const saved = localStorage.getItem('zelloWebPttConfig');
+            if (saved) {
+                try {
+                    const config = JSON.parse(saved);
+                    networkInput.value = config.network || '';
+                    channelInput.value = config.channel || '';
+                    usernameInput.value = config.username || '';
+                    // No cargamos password ni authToken por seguridad
+                } catch (e) {
+                    console.error('Error loading saved config:', e);
+                }
+            }
+        }
+
+        // Guardar configuración
+        function saveConfig() {
+            if (rememberCheckbox.checked) {
+                const config = {
+                    network: networkInput.value,
+                    channel: channelInput.value,
+                    username: usernameInput.value
+                };
+                localStorage.setItem('zelloWebPttConfig', JSON.stringify(config));
+            }
+        }
+
+        // Agregar mensaje al log
+        function addMessage(text, type = 'info') {
+            const message = document.createElement('div');
+            message.className = `message ${type}`;
+            message.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+            messagesContainer.appendChild(message);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Actualizar estado
+        function updateStatus(status, type) {
+            statusDiv.textContent = status;
+            statusDiv.className = `status ${type}`;
+            statusDiv.classList.remove('hidden');
+        }
+
+        // Conectar a Zello
+        async function connectToZello() {
+            const network = networkInput.value.trim();
+            const channel = channelInput.value.trim();
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value.trim();
+            const authToken = authTokenInput.value.trim();
+
+            // Validaciones
+            if (!network) {
+                alert('Por favor ingresa el nombre de la red Zello');
+                return;
+            }
+            if (!channel) {
+                alert('Por favor ingresa el nombre del canal');
+                return;
+            }
+            if (!authToken && (!username || !password)) {
+                alert('Por favor ingresa authToken O usuario/contraseña');
+                return;
+            }
+
+            // Guardar configuración
+            saveConfig();
+
+            // Deshabilitar botón
+            connectBtn.disabled = true;
+            connectBtn.textContent = 'Conectando...';
+
+            updateStatus('Conectando...', 'connecting');
+            messagesContainer.classList.remove('hidden');
+            messagesContainer.innerHTML = '';
+            addMessage('Iniciando SDK de Zello...', 'info');
+
+            try {
+                // Inicializar SDK
+                await ZCC.Sdk.init({
+                    player: true,
+                    decoder: true,
+                    recorder: true,
+                    encoder: true
+                });
+
+                addMessage('SDK inicializado correctamente', 'success');
+
+                // Crear sesión
+                const sessionOptions = {
+                    serverUrl: `wss://zellowork.io/ws/${network}`,
+                    channel: channel,
+                    maxConnectAttempts: 5,
+                    connectRetryTimeoutMs: 2000,
+                    connectTimeoutMs: 60000,
+                    autoSendAudio: true,
+                    clientPing: {
+                        intervalMs: 30000,
+                        consecutiveMissedPongsThreshold: 3
+                    }
+                };
+
+                // Usar authToken o usuario/contraseña
+                if (authToken) {
+                    sessionOptions.authToken = authToken;
+                    addMessage('Usando authToken para autenticación', 'info');
+                } else {
+                    sessionOptions.username = username;
+                    sessionOptions.password = password;
+                    addMessage('Usando usuario/contraseña para autenticación', 'info');
+                }
+
+                session = new ZCC.Session(sessionOptions);
+
+                // Configurar event handlers
+                setupSessionHandlers();
+
+                // Conectar
+                await session.connect();
+
+            } catch (error) {
+                console.error('Connection error:', error);
+                addMessage(`Error: ${error.message || error}`, 'error');
+                updateStatus('Error de conexión', 'disconnected');
+                connectBtn.disabled = false;
+                connectBtn.textContent = 'Conectar a Zello';
+            }
+        }
+
+        // Configurar handlers de sesión
+        function setupSessionHandlers() {
+            session.on('session_start_connect', () => {
+                addMessage('Iniciando conexión con servidor...', 'info');
+            });
+
+            session.on('session_connect', () => {
+                addMessage('¡Conectado exitosamente!', 'success');
+                updateStatus('Conectado - Presiona PTT para hablar', 'connected');
+                
+                isConnected = true;
+                pttButton.disabled = false;
+                pttButton.classList.remove('hidden');
+                connectBtn.textContent = 'Desconectar';
+                connectBtn.disabled = false;
+                connectBtn.onclick = disconnectFromZello;
+            });
+
+            session.on('session_fail_connect', (error) => {
+                addMessage(`Fallo de conexión: ${error}`, 'error');
+                updateStatus('Fallo de conexión', 'disconnected');
+                connectBtn.disabled = false;
+                connectBtn.textContent = 'Reintentar';
+            });
+
+            session.on('session_disconnect', (error) => {
+                addMessage(`Desconectado: ${error || 'Sin error'}`, 'warning');
+                updateStatus('Desconectado', 'disconnected');
+                resetUI();
+            });
+
+            session.on('session_connection_lost', (error) => {
+                addMessage(`Conexión perdida: ${error}`, 'warning');
+                updateStatus('Reconectando...', 'connecting');
+            });
+
+            session.on('error', (error) => {
+                addMessage(`Error: ${error}`, 'error');
+            });
+
+            session.on('status', (status) => {
+                addMessage(`Estado del canal: ${status.status} (${status.users_online} usuarios)`, 'info');
+            });
+
+            session.on('incoming_voice_will_start', (message) => {
+                addMessage(`📥 Voz entrante de: ${message.from || 'desconocido'}`, 'info');
+            });
+
+            session.on('incoming_voice_did_stop', (message) => {
+                addMessage(`Fin de mensaje de voz`, 'info');
+            });
+
+            session.on('incoming_text_message', (message) => {
+                addMessage(`💬 Texto de ${message.from}: ${message.text}`, 'success');
+            });
+        }
+
+        // Desconectar
+        function disconnectFromZello() {
+            if (session) {
+                session.disconnect();
+                session = null;
+            }
+            resetUI();
+        }
+
+        // Resetear UI
+        function resetUI() {
+            isConnected = false;
+            pttButton.disabled = true;
+            pttButton.classList.add('hidden');
+            connectBtn.textContent = 'Conectar a Zello';
+            connectBtn.onclick = connectToZello;
+            updateStatus('Desconectado', 'disconnected');
+        }
+
+        // Handlers del botón PTT
+        function startTransmission() {
+            if (!session || !isConnected) return;
+
+            outgoingMessage = session.startVoiceMessage();
+            pttButton.classList.add('recording');
+            updateStatus('🎙️ TRANSMITIENDO...', 'transmitting');
+            addMessage('Iniciando transmisión de voz...', 'info');
+        }
+
+        function stopTransmission() {
+            if (!outgoingMessage) return;
+
+            outgoingMessage.stop();
+            outgoingMessage = null;
+            pttButton.classList.remove('recording');
+            updateStatus('Conectado - Presiona PTT para hablar', 'connected');
+            addMessage('Transmisión finalizada', 'success');
+        }
+
+        // Event listeners para PTT (mouse y touch)
+        pttButton.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            startTransmission();
+        });
+
+        pttButton.addEventListener('mouseup', (e) => {
+            e.preventDefault();
+            stopTransmission();
+        });
+
+        pttButton.addEventListener('mouseleave', (e) => {
+            e.preventDefault();
+            stopTransmission();
+        });
+
+        pttButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startTransmission();
+        });
+
+        pttButton.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            stopTransmission();
+        });
+
+        // Evitar menú contextual en móvil
+        pttButton.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+
+        // Event listener para conectar
+        connectBtn.addEventListener('click', connectToZello);
+
+        // Cargar configuración al iniciar
+        loadSavedConfig();
+
+        // Manejar cierre de página
+        window.addEventListener('beforeunload', () => {
+            if (session) {
+                session.disconnect();
+            }
+        });
+    </script>
+</body>
+</html>
