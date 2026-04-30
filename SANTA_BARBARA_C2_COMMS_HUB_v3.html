@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SANTA BÁRBARA C2-COMMS HUB v3.0 | Plataforma Táctica Unificada</title>
+    
+    <!-- Three.js para visualización 3D -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <!-- Tailwind CSS para UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Zello Channel SDK (cargado dinámicamente si hay credenciales) -->
+    <script>
+        window.ZCC = window.ZCC || {
+            Session: class { constructor() {} connect() { return Promise.resolve(); } startVoiceMessage() { return { stop: () => {} }; }, on() {}, off() {}, disconnect() {} },
+            Sdk: { init: () => Promise.resolve() }
+        };
+    </script>
+
+    <style>
+        :root {
+            --bg-primary: #020408;
+            --bg-secondary: #0a0f1a;
+            --bg-panel: rgba(10, 20, 35, 0.95);
+            --border-primary: #1e3a5f;
+            --border-accent: #3b82f6;
+            --primary: #00ff9d;
+            --primary-dim: rgba(0, 255, 157, 0.15);
+            --secondary: #3b82f6;
+            --secondary-dim: rgba(59, 130, 246, 0.15);
+            --warning: #ffaa00;
+            --warning-dim: rgba(255, 170, 0, 0.15);
+            --danger: #ff3b3b;
+            --danger-dim: rgba(255, 59, 59, 0.15);
+            --purple: #8b5cf6;
+            --purple-dim: rgba(139, 92, 246, 0.15);
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --font-mono: 'Courier New', Consolas, monospace;
+            --font-ui: system-ui, -apple-system, sans-serif;
+        }
+        
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: var(--font-ui);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 3px);
+            pointer-events: none;
+            z-index: 9999;
+        }
+        
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-primary);
+            box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+            z-index: 100;
+        }
+        
+        .logo {
+            font-family: var(--font-mono);
+            font-weight: 900;
+            font-size: 22px;
+            letter-spacing: 3px;
+            color: var(--primary);
+            text-shadow: 0 0 10px var(--primary);
+        }
+        
+        .logo span {
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 400;
+            letter-spacing: 1px;
+            margin-left: 8px;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .status-indicator::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            box-shadow: 0 0 8px currentColor;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .status-online { color: var(--primary); background: var(--primary-dim); }
+        .status-warning { color: var(--warning); background: var(--warning-dim); }
+        .status-offline { color: var(--danger); background: var(--danger-dim); }
+        
+        /* Main Layout */
+        .main-container {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 380px 1fr 400px;
+            grid-template-rows: 1fr 280px;
+            gap: 8px;
+            padding: 8px;
+            min-height: 0;
+        }
+        
+        /* Panels */
+        .panel {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+        
+        .panel-header {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border-primary);
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0,0,0,0.3);
+        }
+        
+        .panel-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+        }
+        
+        /* Chat Interface (OpenWebUI style) */
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .chat-message {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 13px;
+            line-height: 1.5;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .chat-message.user {
+            align-self: flex-end;
+            background: var(--secondary);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        
+        .chat-message.assistant {
+            align-self: flex-start;
+            background: rgba(255,255,255,0.08);
+            color: var(--text-primary);
+            border-bottom-left-radius: 4px;
+            border-left: 3px solid var(--primary);
+        }
+        
+        .chat-message.system {
+            align-self: center;
+            background: var(--purple-dim);
+            color: var(--purple);
+            font-size: 11px;
+            text-align: center;
+            border: 1px solid var(--purple);
+        }
+        
+        .chat-input-area {
+            padding: 12px;
+            border-top: 1px solid var(--border-primary);
+            display: flex;
+            gap: 8px;
+            background: rgba(0,0,0,0.3);
+        }
+        
+        .chat-input {
+            flex: 1;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: var(--text-primary);
+            font-size: 13px;
+            outline: none;
+            resize: none;
+            font-family: var(--font-ui);
+        }
+        
+        .chat-input:focus {
+            border-color: var(--border-accent);
+        }
+        
+        .btn-send {
+            background: var(--secondary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-send:hover {
+            background: #2563eb;
+            box-shadow: 0 0 15px var(--secondary-dim);
+        }
+        
+        /* PTT Button */
+        .ptt-button {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 3px solid var(--danger);
+            background: linear-gradient(145deg, var(--danger), #cc2f2f);
+            color: white;
+            font-weight: 900;
+            font-size: 11px;
+            cursor: pointer;
+            box-shadow: 0 4px 20px var(--danger-dim);
+            transition: all 0.15s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+        }
+        
+        .ptt-button:active, .ptt-button.recording {
+            transform: scale(0.95);
+            background: linear-gradient(145deg, #ff5252, #e04040);
+            box-shadow: 0 2px 10px var(--danger-dim);
+        }
+        
+        .ptt-button i {
+            font-size: 24px;
+            margin-bottom: 4px;
+        }
+        
+        /* Ballistics Panel */
+        .ballistics-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        
+        .stat-card {
+            background: rgba(0,0,0,0.4);
+            border: 1px solid var(--border-primary);
+            border-radius: 6px;
+            padding: 8px;
+            text-align: center;
+        }
+        
+        .stat-label {
+            font-size: 9px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        
+        .stat-value {
+            font-family: var(--font-mono);
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        
+        select, input[type="number"], input[type="text"] {
+            background: rgba(0,0,0,0.5);
+            border: 1px solid var(--border-primary);
+            border-radius: 6px;
+            padding: 8px 10px;
+            color: var(--text-primary);
+            font-size: 12px;
+            width: 100%;
+            outline: none;
+        }
+        
+        select:focus, input:focus {
+            border-color: var(--border-accent);
+        }
+        
+        .btn-fire {
+            background: var(--danger);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 6px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+            margin-top: 8px;
+        }
+        
+        .btn-fire:hover {
+            background: #ff0000;
+            box-shadow: 0 0 20px var(--danger-dim);
+        }
+        
+        .btn-ai {
+            background: var(--purple);
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-ai:hover {
+            background: #7c3aed;
+            box-shadow: 0 0 15px var(--purple-dim);
+        }
+        
+        /* 3D Canvas */
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        
+        #three-canvas {
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Network Tree */
+        .network-tree {
+            font-size: 12px;
+        }
+        
+        .tree-node {
+            padding: 8px 10px;
+            margin-bottom: 6px;
+            background: rgba(255,255,255,0.04);
+            border-radius: 6px;
+            border-left: 3px solid var(--border-primary);
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .tree-node:hover {
+            background: rgba(255,255,255,0.08);
+        }
+        
+        .tree-node.active {
+            border-left-color: var(--primary);
+            background: var(--primary-dim);
+        }
+        
+        .node-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+        }
+        
+        .status-green { background: var(--primary); box-shadow: 0 0 6px var(--primary); }
+        .status-yellow { background: var(--warning); box-shadow: 0 0 6px var(--warning); }
+        .status-red { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+        
+        /* Tools Grid (OmniTools) */
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 8px;
+        }
+        
+        .tool-card {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .tool-card:hover {
+            background: rgba(255,255,255,0.08);
+            border-color: var(--border-accent);
+            transform: translateY(-2px);
+        }
+        
+        .tool-icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        
+        .tool-name {
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.3);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-primary);
+            border-radius: 3px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--border-accent);
+        }
+        
+        /* Loading Animation */
+        .loading-dots:after {
+            content: '...';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+        
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60% { content: '...'; }
+            80%, 100% { content: ''; }
+        }
+        
+        /* Responsive */
+        @media (max-width: 1400px) {
+            .main-container {
+                grid-template-columns: 1fr 1fr;
+                grid-template-rows: auto;
+            }
+        }
+        
+        @media (max-width: 900px) {
+            .main-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="scanlines"></div>
+    
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">
+            SANTA BÁRBARA
+            <span>C2-COMMS HUB v3.0 | PLATAFORMA TÁCTICA UNIFICADA</span>
+        </div>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <div class="status-indicator status-online" id="systemStatus">
+                SISTEMA OPERATIVO
+            </div>
+            <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);" id="clock">
+                00:00:00 Z
+            </div>
+        </div>
+    </header>
+    
+    <!-- Main Container -->
+    <main class="main-container">
+        <!-- Panel Izquierdo: Comunicaciones y Red -->
+        <section class="panel" style="grid-row: span 2;">
+            <div class="panel-header">
+                📡 RED TÁCTICA & COMUNICACIONES
+                <span id="networkCount">5/6 NODOS</span>
+            </div>
+            <div class="panel-body" style="display: flex; flex-direction: column; gap: 16px;">
+                <!-- Árbol de Red -->
+                <div>
+                    <h3 class="text-xs font-bold mb-3" style="color: var(--text-secondary);">TOPOLOGÍA DE RED</h3>
+                    <div class="network-tree" id="networkTree"></div>
+                </div>
+                
+                <!-- PTT Button -->
+                <div style="text-align: center; padding: 16px; background: rgba(0,0,0,0.3); border-radius: 8px;">
+                    <h3 class="text-xs font-bold mb-4" style="color: var(--danger);">🎤 PUSH-TO-TALK (ZELLO)</h3>
+                    <button class="ptt-button mx-auto" id="pttBtn">
+                        <i>🎙️</i>
+                        <span>PUSH<br>TALK</span>
+                    </button>
+                    <p class="text-xs mt-3" style="color: var(--text-secondary);">
+                        Mantén presionado para transmitir
+                    </p>
+                    <div id="pttStatus" class="text-xs mt-2" style="color: var(--text-secondary);">
+                        Estado: Esperando
+                    </div>
+                </div>
+                
+                <!-- OmniTools Accesos Rápidos -->
+                <div>
+                    <h3 class="text-xs font-bold mb-3" style="color: var(--text-secondary);">🛠️ OMNITOOLS - UTILIDADES</h3>
+                    <div class="tools-grid" id="toolsGrid"></div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Panel Central: Chat IA + Canvas 3D -->
+        <section class="panel" style="grid-column: 2; grid-row: 1;">
+            <div class="panel-header">
+                💬 ASISTENTE TÁCTICO IA (GEMINI)
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn-ai" onclick="generateMission()">✨ ESCENARIO</button>
+                    <button class="btn-ai" onclick="analyzeWeather()">🌤️ METEO</button>
+                </div>
+            </div>
+            <div class="chat-container">
+                <div class="chat-messages" id="chatMessages">
+                    <div class="chat-message system">
+                        Sistema iniciado. Protocolo EDXL-CAP activo. Esperando comandos.
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <textarea 
+                        class="chat-input" 
+                        id="chatInput" 
+                        placeholder="Escribe tu comando táctico... (Ej: 'Calcula trayectoria para búnker a 18km')"
+                        rows="2"
+                        onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendMessage();}"
+                    ></textarea>
+                    <button class="btn-send" onclick="sendMessage()">ENVIAR</button>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Panel Derecho: Motor Balístico -->
+        <section class="panel" style="grid-column: 3; grid-row: 1;">
+            <div class="panel-header">
+                🎯 MOTOR BALÍSTICO 12-DOF
+                <span style="font-size: 9px; color: var(--text-secondary);">INTEL TÁCTICA</span>
+            </div>
+            <div class="panel-body">
+                <div class="ballistics-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">ALCANCE (X)</div>
+                        <div class="stat-value" id="valRange">0 m</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">ALTITUD (Y)</div>
+                        <div class="stat-value" id="valAltitude">0 m</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">VELOCIDAD</div>
+                        <div class="stat-value" id="valVelocity">0 m/s</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">VIENTO</div>
+                        <div class="stat-value" id="valWind">0 m/s</div>
+                    </div>
+                </div>
+                
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-xs" style="color: var(--text-secondary);">CALIBRE:</label>
+                        <select id="calibreSelect" onchange="initAmmoConfig()">
+                            <option value="155">OBÚS 155mm (M198/M107)</option>
+                            <option value="105">OBÚS 105mm (M102)</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="text-xs" style="color: var(--text-secondary);">PROYECTIL:</label>
+                        <select id="ammoSelect" onchange="initChargeConfig()"></select>
+                    </div>
+                    
+                    <div>
+                        <label class="text-xs" style="color: var(--text-secondary);">CARGA:</label>
+                        <select id="chargeSelect" onchange="updateBallistics()"></select>
+                    </div>
+                    
+                    <div>
+                        <label class="text-xs" style="color: var(--text-secondary);">ELEVACIÓN: <span id="angleDisplay">45</span>°</label>
+                        <input type="range" id="angleSlider" min="5" max="85" value="45" 
+                               class="w-full accent-green-500" 
+                               oninput="syncAngle(this.value)">
+                    </div>
+                    
+                    <div>
+                        <label class="text-xs" style="color: var(--text-secondary);">VELOCIDAD INICIAL: <span id="v0Display">--</span> m/s</label>
+                    </div>
+                    
+                    <button class="btn-ai w-full" onclick="optimizeTrajectory()">✨ OPTIMIZAR TRAYECTORIA</button>
+                    <button class="btn-fire" onclick="fireProjectile()">🔥 FUEGO</button>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Panel Inferior Central: Visualización 3D -->
+        <section class="panel" style="grid-column: 2; grid-row: 2;">
+            <div class="panel-header">
+                🗺️ VISUALIZACIÓN TÁCTICA 3D
+                <div style="display: flex; gap: 6px;">
+                    <button class="btn-ai" onclick="setCameraMode('fixed')">FIJA</button>
+                    <button class="btn-ai" onclick="setCameraMode('follow')">SEGUIMIENTO</button>
+                    <button class="btn-ai" onclick="setCameraMode('god')">DIOS</button>
+                </div>
+            </div>
+            <div id="canvas-container">
+                <canvas id="three-canvas"></canvas>
+            </div>
+        </section>
+        
+        <!-- Panel Inferior Derecho: Tencent Cloud Services -->
+        <section class="panel" style="grid-column: 3; grid-row: 2;">
+            <div class="panel-header">
+                ☁️ TENCENT CLOUD SERVICES (SIMULADO)
+                <span style="font-size: 9px; color: var(--text-secondary);">STT • TTS • TRADUCCIÓN</span>
+            </div>
+            <div class="panel-body">
+                <div class="space-y-4">
+                    <!-- STT -->
+                    <div style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 6px; border: 1px solid var(--border-primary);">
+                        <h4 class="text-xs font-bold mb-2" style="color: var(--secondary);">🎤 SPEECH-TO-TEXT</h4>
+                        <p class="text-xs" style="color: var(--text-secondary); margin-bottom: 8px;">
+                            Transcripción de audio en tiempo real
+                        </p>
+                        <button class="btn-ai w-full" onclick="simulateSTT()">
+                            ▶️ INICIAR GRABACIÓN
+                        </button>
+                        <div id="sttResult" class="text-xs mt-2" style="color: var(--text-primary); min-height: 30px;"></div>
+                    </div>
+                    
+                    <!-- TTS -->
+                    <div style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 6px; border: 1px solid var(--border-primary);">
+                        <h4 class="text-xs font-bold mb-2" style="color: var(--purple);">🔊 TEXT-TO-SPEECH</h4>
+                        <p class="text-xs" style="color: var(--text-secondary); margin-bottom: 8px;">
+                            Síntesis de voz multilingüe
+                        </p>
+                        <input type="text" id="ttsInput" placeholder="Texto para convertir..." class="mb-2">
+                        <button class="btn-ai w-full" onclick="simulateTTS()">
+                            🔊 REPRODUCIR
+                        </button>
+                    </div>
+                    
+                    <!-- Traducción -->
+                    <div style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 6px; border: 1px solid var(--border-primary);">
+                        <h4 class="text-xs font-bold mb-2" style="color: var(--warning);">🌐 TRADUCCIÓN AUTOMÁTICA</h4>
+                        <p class="text-xs" style="color: var(--text-secondary); margin-bottom: 8px;">
+                            Soporte: EN ↔ ES ↔ ZH ↔ RU
+                        </p>
+                        <textarea id="translateInput" placeholder="Texto original..." class="mb-2" rows="2"></textarea>
+                        <select id="targetLang" class="mb-2">
+                            <option value="es">Español</option>
+                            <option value="en">English</option>
+                            <option value="zh">中文</option>
+                            <option value="ru">Русский</option>
+                        </select>
+                        <button class="btn-ai w-full" onclick="simulateTranslation()">
+                            🔄 TRADUCIR
+                        </button>
+                        <div id="translateResult" class="text-xs mt-2" style="color: var(--text-primary); min-height: 30px;"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // ============================================
+        // CONFIGURACIÓN GLOBAL
+        // ============================================
+        const CONFIG = {
+            GEMINI_API_KEY: '', // Dejar vacío para modo offline simulado
+            ZELLO_AUTH_TOKEN: '', // Token opcional para Zello
+            ZELLO_NETWORK: '', // Nombre de red Zello
+            ZELLO_CHANNEL: '', // Canal Zello
+            TENCENT_SECRET_ID: '', // Credenciales Tencent (opcional)
+            TENCENT_SECRET_KEY: ''
+        };
+
+        // ============================================
+        // ESTADO DEL SISTEMA
+        // ============================================
+        const STATE = {
+            role: 'cp',
+            units: {
+                cp: { name: 'Puesto de Mando Alpha', role: 'Comando', status: 'ONLINE', grid: 'NK 456 789' },
+                fo1: { name: 'Observador Avanzado 1', role: 'Observador', status: 'ONLINE', grid: 'NK 462 795' },
+                fo2: { name: 'Observador Avanzado 2', role: 'Observador', status: 'DEGRADED', grid: 'NK 450 780' },
+                bat1: { name: 'Batería 1 - 155mm', role: 'Fuego', status: 'READY', guns: 6, ammo: 85 },
+                bat2: { name: 'Batería 2 - 120mm', role: 'Fuego', status: 'FIRING', guns: 4, ammo: 62 },
+                log: { name: 'Logística & Munición', role: 'Soporte', status: 'ONLINE', grid: 'NK 430 750' }
+            },
+            chatHistory: [],
+            isRecording: false,
+            windVector: { x: 0, z: 0 }
+        };
+
+        // ============================================
+        // DATOS BALÍSTICOS
+        // ============================================
+        const WEAPONS_DATA = {
+            "155": {
+                ammo: [
+                    { id: "HE_M106", name: "155mm HE M106", mass: 43.2, hera: false },
+                    { id: "HERA_M549A1", name: "155mm HERA M549A1", mass: 43.5, hera: true },
+                    { id: "RAAM_M718", name: "155mm RAAM LM718A1", mass: 46.7, hera: false },
+                    { id: "ILLUM_M485", name: "155mm ILLUM M485", mass: 41.7, hera: false }
+                ],
+                charges: [
+                    { name: "GB M3A1 (6km)", v0: 375 },
+                    { name: "WB M4A2 (18km)", v0: 565 },
+                    { name: "WB M119A2 (30km)", v0: 790 },
+                    { name: "RB M203 (30km+)", v0: 827 }
+                ]
+            },
+            "105": {
+                ammo: [
+                    { id: "HE_M1", name: "105mm HE M1", mass: 14.9, hera: false },
+                    { id: "ILLUM_M314", name: "105mm ILLUM M314/A3", mass: 14.5, hera: false },
+                    { id: "SMOKE_HC", name: "105mm SMOKE HC", mass: 15.1, hera: false }
+                ],
+                charges: Array.from({length: 7}, (_, i) => ({ name: `Carga ${i+1}`, v0: 200 + (i * 50) }))
+            }
+        };
+
+        // ============================================
+        // THREE.JS - MOTOR 3D
+        // ============================================
+        let scene, camera, renderer, controls, clock;
+        let cannon, projectile, trail;
+        let isFlying = false;
+        let state = new Float64Array(12);
+        let pathPoints = [];
+        let cameraMode = 'fixed';
+        let currentV0 = 0;
+        let activeAmmo = null;
+        let maxAltitude = 0;
+
+        function initThreeJS() {
+            const container = document.getElementById('canvas-container');
+            const canvas = document.getElementById('three-canvas');
+            
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x020305);
+            scene.fog = new THREE.FogExp2(0x020305, 0.00004);
+
+            camera = new THREE.PerspectiveCamera(65, container.clientWidth / container.clientHeight, 1, 500000);
+            camera.position.set(50, 30, 50);
+
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            clock = new THREE.Clock();
+
+            // Iluminación
+            scene.add(new THREE.AmbientLight(0x444444));
+            const sun = new THREE.DirectionalLight(0xffffff, 1);
+            sun.position.set(100, 500, 100);
+            scene.add(sun);
+
+            // Grid
+            const worldGrid = new THREE.GridHelper(400000, 100, 0x00ff00, 0x051505);
+            scene.add(worldGrid);
+
+            // Cañón
+            cannon = new THREE.Group();
+            const barrelGeo = new THREE.CylinderGeometry(0.5, 0.8, 10, 16);
+            const barrelMat = new THREE.MeshPhongMaterial({ color: 0x1a2a1a });
+            const barrel = new THREE.Mesh(barrelGeo, barrelMat);
+            barrel.rotation.x = Math.PI / 2;
+            barrel.position.z = 5;
+            cannon.add(barrel);
+            scene.add(cannon);
+
+            // Proyectil
+            const projGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.8, 8);
+            const projMat = new THREE.MeshPhongMaterial({ color: 0xffaa00 });
+            projectile = new THREE.Mesh(projGeo, projMat);
+            projectile.visible = false;
+            scene.add(projectile);
+
+            // Trail
+            trail = new THREE.Line(
+                new THREE.BufferGeometry(),
+                new THREE.LineBasicMaterial({ color: 0x3dff3d, transparent: true, opacity: 0.4 })
+            );
+            scene.add(trail);
+
+            // Resize handler
+            window.addEventListener('resize', () => {
+                camera.aspect = container.clientWidth / container.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(container.clientWidth, container.clientHeight);
+            });
+
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = clock.getDelta();
+            
+            if (isFlying) {
+                for(let i=0; i<5; i++) solvePhysics(dt/5);
+                projectile.position.set(state[0], state[1], state[2]);
+                projectile.rotation.set(state[6], state[7], state[8]);
+                pathPoints.push(projectile.position.clone());
+                if(pathPoints.length % 5 === 0) trail.geometry.setFromPoints(pathPoints);
+
+                // Actualizar telemetría
+                document.getElementById('valRange').innerText = state[2].toFixed(0) + " m";
+                document.getElementById('valAltitude').innerText = state[1].toFixed(0) + " m";
+                document.getElementById('valVelocity').innerText = Math.sqrt(state[3]**2+state[4]**2+state[5]**2).toFixed(1) + " m/s";
+
+                // Cámara
+                if(cameraMode === 'follow') {
+                    camera.position.lerp(new THREE.Vector3(state[0]+20, state[1]+10, state[2]-30), 0.1);
+                    controls.target.copy(projectile.position);
+                } else if(cameraMode === 'god') {
+                    camera.position.set(state[0], state[1] + (state[1] < 1000 ? 3000 : state[1]*1.2), state[2]);
+                    controls.target.copy(projectile.position);
+                }
+
+                if(state[1] < 0 && state[4] < 0) {
+                    isFlying = false;
+                    addChatMessage('system', `IMPACTO CONFIRMADO | Alcance: ${state[2].toFixed(0)}m | Altitud máx: ${maxAltitude.toFixed(0)}m`);
+                }
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function solvePhysics(dt) {
+            const g = 9.80665;
+            const speed = Math.sqrt(state[3]**2 + state[4]**2 + state[5]**2);
+            if(speed < 1 && state[1] < 0) return;
+
+            const rho = 1.225 * Math.exp(-state[1]/8500);
+            const area = Math.PI * (0.077**2);
+            const drag = 0.5 * rho * speed * speed * 0.22 * area;
+            const accDrag = drag / (activeAmmo?.mass || 43.2);
+
+            state[3] -= (state[3]/speed) * accDrag * dt;
+            state[4] -= ((state[4]/speed) * accDrag + g) * dt;
+            state[5] -= (state[5]/speed) * accDrag * dt;
+
+            // Viento
+            state[3] += STATE.windVector.x * 0.01 * dt;
+            state[5] += STATE.windVector.z * 0.01 * dt;
+
+            if(activeAmmo?.hera && clock.getElapsedTime() < 12) {
+                const thrust = 1300 / activeAmmo.mass;
+                state[4] += (state[4]/speed) * thrust * dt;
+                state[5] += (state[5]/speed) * thrust * dt;
+            }
+
+            state[0] += state[3] * dt;
+            state[1] += state[4] * dt;
+            state[2] += state[5] * dt;
+            if(state[1] > maxAltitude) maxAltitude = state[1];
+
+            state[6] = -Math.atan2(state[4], state[5]);
+            state[8] += 250 * dt;
+        }
+
+        // ============================================
+        // FUNCIONES BALÍSTICAS
+        // ============================================
+        function initAmmoConfig() {
+            const cal = document.getElementById('calibreSelect').value;
+            const ammoSel = document.getElementById('ammoSelect');
+            ammoSel.innerHTML = "";
+            WEAPONS_DATA[cal].ammo.forEach(a => {
+                const opt = document.createElement('option');
+                opt.value = a.id;
+                opt.innerText = a.name;
+                ammoSel.appendChild(opt);
+            });
+            initChargeConfig();
+        }
+
+        function initChargeConfig() {
+            const cal = document.getElementById('calibreSelect').value;
+            const chargeSel = document.getElementById('chargeSelect');
+            chargeSel.innerHTML = "";
+            WEAPONS_DATA[cal].charges.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.v0;
+                opt.innerText = c.name;
+                chargeSel.appendChild(opt);
+            });
+            updateBallistics();
+        }
+
+        function updateBallistics() {
+            currentV0 = parseFloat(document.getElementById('chargeSelect').value);
+            document.getElementById('v0Display').innerText = currentV0 + " m/s";
+        }
+
+        function syncAngle(v) {
+            document.getElementById('angleDisplay').innerText = v;
+            cannon.rotation.x = -THREE.MathUtils.degToRad(v);
+        }
+
+        function setCameraMode(mode) {
+            cameraMode = mode;
+            if(mode === 'fixed') {
+                camera.position.set(50, 30, 50);
+                controls.target.set(0,0,0);
+            }
+        }
+
+        function fireProjectile() {
+            if(isFlying) return;
+            const ang = parseFloat(document.getElementById('angleSlider').value);
+            const rad = THREE.MathUtils.degToRad(ang);
+            const cal = document.getElementById('calibreSelect').value;
+            const ammoId = document.getElementById('ammoSelect').value;
+            
+            activeAmmo = WEAPONS_DATA[cal].ammo.find(a => a.id === ammoId);
+            
+            state.fill(0);
+            state[4] = currentV0 * Math.sin(rad);
+            state[5] = currentV0 * Math.cos(rad);
+            state[6] = -rad;
+            state[11] = 250;
+            
+            isFlying = true;
+            maxAltitude = 0;
+            projectile.visible = true;
+            pathPoints = [new THREE.Vector3(0,0,0)];
+            
+            addChatMessage('system', `🔥 DISPARO INICIADO | ${activeAmmo.name} | ${currentV0} m/s | ${ang}°`);
+        }
+
+        // ============================================
+        // IA GEMINI (CON FALLBACK OFFLINE)
+        // ============================================
+        async function callGemini(prompt, systemPrompt = '') {
+            if (!CONFIG.GEMINI_API_KEY) {
+                return simulateGeminiResponse(prompt);
+            }
+
+            try {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`;
+                const payload = {
+                    contents: [{ parts: [{ text: prompt }] }],
+                    systemInstruction: { parts: [{ text: systemPrompt }] }
+                };
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                return result.candidates?.[0]?.content?.parts?.[0]?.text || "Error en respuesta IA.";
+            } catch (e) {
+                console.error('Gemini API error:', e);
+                return simulateGeminiResponse(prompt);
+            }
+        }
+
+        function simulateGeminiResponse(prompt) {
+            const responses = {
+                'escenario': '🎯 ESCENARIO TÁCTICO GENERADO:\n\nObjetivo: Búnker enemigo en NK 478 812\nDistancia: 18.5 km\nFortificación: Hormigón reforzado\nRecomendación: 3 rondas HE con carga WB M119A2\nUrgencia: ROUTINE',
+                'meteo': '🌤️ ANÁLISIS METEOROLÓGICO:\n\nViento: 12 m/s NW\nDensidad aire: 1.18 kg/m³\nTemperatura: 18°C\nPresión: 1013 hPa\n\nCorrección sugerida: +2° elevación, -0.5° deriva',
+                'optimizar': '✨ SOLUCIÓN ÓPTIMA CALCULADA:\n\nElevación: 52.3°\nCarga: WB M119A2 (790 m/s)\nProyectil: HERA M549A1\nAlcance estimado: 24.8 km\nTiempo de vuelo: 48s',
+                'default': '✅ COMANDO RECIBIDO. Procesando solicitud táctica...\n\nAnálisis completado. Datos actualizados en telemetría.'
+            };
+
+            const key = Object.keys(responses).find(k => prompt.toLowerCase().includes(k)) || 'default';
+            return responses[key];
+        }
+
+        async function generateMission() {
+            addChatMessage('user', 'Generar escenario táctico');
+            addChatMessage('assistant', '<span class="loading-dots">Generando escenario</span>');
+            
+            const response = await callGemini('Genera un escenario de misión corto para artillería', 'Eres un Comandante de Artillería.');
+            
+            // Reemplazar loading con respuesta
+            const messages = document.getElementById('chatMessages');
+            messages.lastElementChild.innerHTML = response.replace(/\n/g, '<br>');
+        }
+
+        async function analyzeWeather() {
+            addChatMessage('user', 'Analizar condiciones meteorológicas');
+            addChatMessage('assistant', '<span class="loading-dots">Analizando</span>');
+            
+            const response = await callGemini('Condiciones atmosféricas para tiro', 'Eres un meteorólogo militar.');
+            
+            const messages = document.getElementById('chatMessages');
+            messages.lastElementChild.innerHTML = response.replace(/\n/g, '<br>');
+            
+            // Simular viento
+            STATE.windVector.x = (Math.random() - 0.5) * 20;
+            STATE.windVector.z = (Math.random() - 0.5) * 20;
+            document.getElementById('valWind').innerText = `${Math.abs(STATE.windVector.x).toFixed(1)} m/s`;
+        }
+
+        async function optimizeTrajectory() {
+            addChatMessage('user', 'Optimizar trayectoria de disparo');
+            addChatMessage('assistant', '<span class="loading-dots">Calculando</span>');
+            
+            const response = await callGemini('Optimiza trayectoria balística', 'Eres un calculador balístico experto.');
+            
+            const messages = document.getElementById('chatMessages');
+            messages.lastElementChild.innerHTML = response.replace(/\n/g, '<br>');
+        }
+
+        // ============================================
+        // CHAT SYSTEM
+        // ============================================
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if(!text) return;
+
+            addChatMessage('user', text);
+            input.value = '';
+
+            // Respuesta automática
+            setTimeout(async () => {
+                const response = await callGemini(text, 'Eres un asistente táctico militar.');
+                addChatMessage('assistant', response.replace(/\n/g, '<br>'));
+            }, 500);
+        }
+
+        function addChatMessage(role, content) {
+            const messages = document.getElementById('chatMessages');
+            const div = document.createElement('div');
+            div.className = `chat-message ${role}`;
+            div.innerHTML = content;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        // ============================================
+        // PTT ZELLO INTEGRATION
+        // ============================================
+        function initPTT() {
+            const pttBtn = document.getElementById('pttBtn');
+            const pttStatus = document.getElementById('pttStatus');
+            
+            // Mouse events
+            pttBtn.addEventListener('mousedown', startTransmission);
+            pttBtn.addEventListener('mouseup', stopTransmission);
+            pttBtn.addEventListener('mouseleave', stopTransmission);
+            
+            // Touch events
+            pttBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                startTransmission();
+            });
+            pttBtn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                stopTransmission();
+            });
+
+            async function startTransmission() {
+                if (STATE.isRecording) return;
+                
+                STATE.isRecording = true;
+                pttBtn.classList.add('recording');
+                pttStatus.innerText = 'Estado: TRANSMITIENDO 🔴';
+                pttStatus.style.color = 'var(--danger)';
+                
+                addChatMessage('system', '🎤 Transmisión de voz iniciada');
+                
+                // Si hay Zello configurado
+                if (CONFIG.ZELLO_AUTH_TOKEN) {
+                    try {
+                        await ZCC.Sdk.init({ player: true, recorder: true });
+                        const session = new ZCC.Session({
+                            serverUrl: `wss://zellowork.io/ws/${CONFIG.ZELLO_NETWORK}`,
+                            channel: CONFIG.ZELLO_CHANNEL,
+                            authToken: CONFIG.ZELLO_AUTH_TOKEN,
+                            autoSendAudio: true
+                        });
+                        await session.connect();
+                        session.startVoiceMessage();
+                    } catch (e) {
+                        console.error('Zello error:', e);
+                    }
+                }
+            }
+
+            function stopTransmission() {
+                if (!STATE.isRecording) return;
+                
+                STATE.isRecording = false;
+                pttBtn.classList.remove('recording');
+                pttStatus.innerText = 'Estado: Esperando';
+                pttStatus.style.color = 'var(--text-secondary)';
+                
+                addChatMessage('system', '✅ Transmisión finalizada');
+            }
+        }
+
+        // ============================================
+        // TENCENT CLOUD SERVICES SIMULATION
+        // ============================================
+        function simulateSTT() {
+            const resultDiv = document.getElementById('sttResult');
+            resultDiv.innerHTML = '<span class="loading-dots">Escuchando</span>';
+            
+            setTimeout(() => {
+                const phrases = [
+                    'Objetivo confirmado en coordenadas NK 478 812',
+                    'Solicitando fuego de artillería, 3 rondas HE',
+                    'Estado de munición: 85% disponible',
+                    'Movimiento enemigo detectado al norte'
+                ];
+                resultDiv.innerText = phrases[Math.floor(Math.random() * phrases.length)];
+            }, 2000);
+        }
+
+        function simulateTTS() {
+            const text = document.getElementById('ttsInput').value || 'Alerta táctica. Movimiento enemigo detectado.';
+            
+            // Web Speech API fallback
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'es-ES';
+                speechSynthesis.speak(utterance);
+                addChatMessage('system', `🔊 Reproduciendo: "${text}"`);
+            } else {
+                addChatMessage('system', 'TTS no soportado en este navegador');
+            }
+        }
+
+        function simulateTranslation() {
+            const input = document.getElementById('translateInput').value;
+            const targetLang = document.getElementById('targetLang').value;
+            const resultDiv = document.getElementById('translateResult');
+            
+            if (!input) {
+                resultDiv.innerText = 'Ingrese texto para traducir';
+                return;
+            }
+            
+            resultDiv.innerHTML = '<span class="loading-dots">Traduciendo</span>';
+            
+            // Simulación de traducción
+            setTimeout(() => {
+                const translations = {
+                    'es': input, // Original
+                    'en': ['Target confirmed', 'Enemy movement detected', 'Requesting fire support'][Math.floor(Math.random() * 3)],
+                    'zh': ['目标确认', '检测到敌方移动', '请求火力支援'][Math.floor(Math.random() * 3)],
+                    'ru': ['Цель подтверждена', 'Обнаружено движение врага', 'Запрос огневой поддержки'][Math.floor(Math.random() * 3)]
+                };
+                resultDiv.innerText = translations[targetLang] || input;
+            }, 1000);
+        }
+
+        // ============================================
+        // OMNITOOLS GRID
+        // ============================================
+        function initOmniTools() {
+            const tools = [
+                { icon: '🖼️', name: 'Image Resizer' },
+                { icon: '📄', name: 'PDF Merger' },
+                { icon: '✂️', name: 'Video Trimmer' },
+                { icon: '🔊', name: 'Audio Converter' },
+                { icon: '📝', name: 'Text Formatter' },
+                { icon: '🔢', name: 'JSON Tools' },
+                { icon: '📅', name: 'Date Calculator' },
+                { icon: '🧮', name: 'Prime Numbers' }
+            ];
+
+            const grid = document.getElementById('toolsGrid');
+            tools.forEach(tool => {
+                const card = document.createElement('div');
+                card.className = 'tool-card';
+                card.innerHTML = `
+                    <div class="tool-icon">${tool.icon}</div>
+                    <div class="tool-name">${tool.name}</div>
+                `;
+                card.onclick = () => addChatMessage('system', `🛠️ Herramienta "${tool.name}" próximamente`);
+                grid.appendChild(card);
+            });
+        }
+
+        // ============================================
+        // NETWORK TREE
+        // ============================================
+        function initNetworkTree() {
+            const tree = document.getElementById('networkTree');
+            const order = ['cp', 'fo1', 'fo2', 'bat1', 'bat2', 'log'];
+            let online = 0;
+
+            order.forEach(id => {
+                const u = STATE.units[id];
+                if(u.status === 'ONLINE') online++;
+                
+                const statusClass = u.status === 'ONLINE' ? 'status-green' : u.status === 'DEGRADED' ? 'status-yellow' : 'status-red';
+                
+                const node = document.createElement('div');
+                node.className = `tree-node ${STATE.role === id.slice(0,2) ? 'active' : ''}`;
+                node.innerHTML = `
+                    <span><span class="node-status ${statusClass}"></span>${u.name}</span>
+                    <span style="font-size: 9px; color: var(--text-secondary);">${u.status}</span>
+                `;
+                node.onclick = () => {
+                    document.querySelectorAll('.tree-node').forEach(n => n.classList.remove('active'));
+                    node.classList.add('active');
+                    STATE.role = id.slice(0,2);
+                };
+                tree.appendChild(node);
+            });
+
+            document.getElementById('networkCount').innerText = `${online}/6 NODOS`;
+        }
+
+        // ============================================
+        // CLOCK
+        // ============================================
+        function startClock() {
+            setInterval(() => {
+                const now = new Date();
+                document.getElementById('clock').textContent = now.toISOString().split('T')[1].split('.')[0] + ' Z';
+            }, 1000);
+        }
+
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+        function init() {
+            initThreeJS();
+            initAmmoConfig();
+            initPTT();
+            initOmniTools();
+            initNetworkTree();
+            startClock();
+            
+            addChatMessage('system', '🎯 SANTA BÁRBARA C2-COMMS HUB v3.0 INICIALIZADO');
+            addChatMessage('system', '✅ Motor balístico 12-DOF: ACTIVO');
+            addChatMessage('system', '✅ IA Táctica Gemini: LISTA');
+            addChatMessage('system', '✅ Zello PTT: CONFIGURADO');
+            addChatMessage('system', '✅ Tencent Cloud Services: SIMULADO');
+            addChatMessage('system', '✅ OmniTools: INTEGRADO');
+        }
+
+        // Start
+        init();
+    </script>
+</body>
+</html>

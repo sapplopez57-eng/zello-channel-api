@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SANTA BÁRBARA | C2-Comms Hub Integrado</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg: #020305;
+            --panel: rgba(5, 15, 5, 0.95);
+            --border: #3dff3d;
+            --primary: #3dff3d;
+            --warn: #ffaa00;
+            --crit: #ff3b3b;
+            --info: #00b4ff;
+            --purple: #6d28d9;
+            --text: #e6edf3;
+            --text-dim: #8b949e;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: var(--bg); 
+            font-family: 'Courier New', Courier, monospace;
+            color: var(--text);
+        }
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; }
+        
+        /* UI Layer */
+        #ui-layer { 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            pointer-events: none; 
+            z-index: 10;
+            display: grid;
+            grid-template-columns: 380px 1fr 400px;
+            grid-template-rows: 60px 1fr 200px;
+            gap: 8px;
+            padding: 8px;
+        }
+        
+        /* Header */
+        .header-bar {
+            grid-column: 1 / -1;
+            background: linear-gradient(90deg, rgba(5,15,5,0.98), rgba(10,25,10,0.95));
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: auto;
+            box-shadow: 0 0 20px rgba(61, 255, 61, 0.2);
+        }
+        .logo {
+            font-size: 18px;
+            font-weight: 900;
+            color: var(--primary);
+            text-shadow: 0 0 10px var(--primary);
+            letter-spacing: 2px;
+        }
+        .logo span { color: var(--text-dim); font-size: 11px; margin-left: 8px; }
+        .status-indicators { display: flex; gap: 12px; align-items: center; }
+        .status-pill {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .status-pill::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+            box-shadow: 0 0 6px currentColor;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .status-ok { color: var(--primary); background: rgba(61, 255, 61, 0.15); }
+        .status-warn { color: var(--warn); background: rgba(255, 170, 0, 0.15); }
+        .status-crit { color: var(--crit); background: rgba(255, 59, 59, 0.15); }
+        
+        /* Panels */
+        .panel {
+            pointer-events: auto;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 15px rgba(61, 255, 61, 0.1);
+        }
+        .panel-header {
+            padding: 10px 14px;
+            border-bottom: 1px solid rgba(61, 255, 61, 0.3);
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .panel-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+        }
+        
+        /* Left Panel - Ballistics */
+        #panel-left { grid-row: 2 / 4; }
+        
+        /* Right Panel - Comms & AI Chat */
+        #panel-right { 
+            grid-row: 2 / 4;
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 6px;
+            margin-bottom: 10px;
+            max-height: 300px;
+        }
+        .chat-message {
+            margin-bottom: 12px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+        .chat-message.user {
+            background: rgba(109, 40, 217, 0.3);
+            border-left: 3px solid var(--purple);
+        }
+        .chat-message.ai {
+            background: rgba(61, 255, 61, 0.15);
+            border-left: 3px solid var(--primary);
+        }
+        .chat-message.system {
+            background: rgba(0, 180, 255, 0.15);
+            border-left: 3px solid var(--info);
+        }
+        .chat-input-area {
+            display: flex;
+            gap: 8px;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 6px;
+        }
+        .chat-input-area input, .chat-input-area textarea {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid var(--border);
+            color: var(--primary);
+            padding: 8px;
+            font-size: 11px;
+            border-radius: 4px;
+            resize: none;
+        }
+        .chat-input-area input:focus, .chat-input-area textarea:focus {
+            outline: none;
+            border-color: var(--purple);
+            box-shadow: 0 0 8px rgba(109, 40, 217, 0.4);
+        }
+        
+        /* Bottom Panel - Tactical Map */
+        #panel-bottom {
+            grid-column: 2 / 3;
+            grid-row: 3;
+        }
+        
+        /* Controls */
+        .control-group { margin-bottom: 12px; }
+        .hud-label {
+            color: var(--primary);
+            font-size: 9px;
+            text-transform: uppercase;
+            font-weight: 700;
+            margin-bottom: 4px;
+            display: block;
+        }
+        select, input[type="number"], input[type="text"], textarea {
+            background: rgba(0, 0, 0, 0.6);
+            color: var(--primary);
+            border: 1px solid var(--border);
+            font-size: 10px;
+            width: 100%;
+            padding: 6px;
+            border-radius: 4px;
+        }
+        select:focus, input:focus, textarea:focus {
+            outline: none;
+            border-color: var(--purple);
+        }
+        
+        /* Buttons */
+        .btn {
+            pointer-events: auto;
+            border: none;
+            padding: 8px 12px;
+            font-weight: 700;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-radius: 4px;
+            transition: all 0.3s;
+            font-size: 10px;
+        }
+        .btn-fire {
+            background: linear-gradient(135deg, #ff3d3d, #cc0000);
+            color: white;
+            width: 100%;
+            box-shadow: 0 0 15px rgba(255, 61, 61, 0.4);
+        }
+        .btn-fire:hover {
+            background: linear-gradient(135deg, #ff0000, #990000);
+            box-shadow: 0 0 25px rgba(255, 0, 0, 0.6);
+        }
+        .btn-ai {
+            background: linear-gradient(135deg, #6d28d9, #4a1d96);
+            color: white;
+            box-shadow: 0 0 12px rgba(109, 40, 217, 0.4);
+        }
+        .btn-ai:hover {
+            background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.6);
+        }
+        .btn-secondary {
+            background: rgba(61, 255, 61, 0.2);
+            color: var(--primary);
+            border: 1px solid var(--border);
+        }
+        .btn-secondary:hover {
+            background: rgba(61, 255, 61, 0.3);
+        }
+        
+        /* Telemetry Grid */
+        .telemetry-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+        .telemetry-item {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(61, 255, 61, 0.3);
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .telemetry-label {
+            font-size: 8px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+        .telemetry-value {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        
+        /* Toggle Button */
+        .toggle-btn {
+            cursor: pointer;
+            border: 1px solid var(--border);
+            padding: 2px 6px;
+            font-size: 8px;
+            border-radius: 3px;
+            background: transparent;
+            color: var(--primary);
+        }
+        .toggle-btn:hover {
+            background: rgba(61, 255, 61, 0.2);
+        }
+        
+        /* Loading Animation */
+        .loading-dots::after {
+            content: '...';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60% { content: '...'; }
+        }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.3); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--purple); }
+        
+        /* PTT Button */
+        .ptt-button {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #ff6b6b, #ee5a5a);
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            font-weight: 900;
+            font-size: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(238, 90, 90, 0.5);
+            transition: all 0.15s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+        }
+        .ptt-button:active, .ptt-button.recording {
+            transform: scale(0.92);
+            background: linear-gradient(145deg, #ff5252, #e04040);
+            box-shadow: 0 2px 15px rgba(224, 64, 64, 0.8);
+        }
+        .ptt-button span { font-size: 8px; font-weight: 400; margin-top: 2px; }
+        
+        /* Network Status */
+        .network-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 4px;
+            margin-top: 8px;
+        }
+        .network-node {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border);
+            padding: 6px;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 9px;
+        }
+        .network-node.active { border-color: var(--primary); box-shadow: 0 0 8px rgba(61, 255, 61, 0.3); }
+        .network-node.inactive { border-color: var(--text-dim); opacity: 0.5; }
+        
+        /* Responsive */
+        @media (max-width: 1400px) {
+            #ui-layer {
+                grid-template-columns: 320px 1fr 350px;
+            }
+        }
+        @media (max-width: 1100px) {
+            #ui-layer {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto auto auto;
+            }
+            #panel-left, #panel-right, #panel-bottom {
+                grid-column: 1;
+                grid-row: auto;
+                max-height: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    
+    <div id="ui-layer">
+        <!-- Header -->
+        <div class="header-bar">
+            <div class="logo">
+                SANTA BÁRBARA
+                <span>C2-COMMS HUB v2.0 | EDXL-CAP | STANAG 4607</span>
+            </div>
+            <div class="status-indicators">
+                <div class="status-pill status-ok" id="sysStatus">
+                    <span>RED ACTIVA</span>
+                </div>
+                <div class="status-pill" id="zelloStatus" style="color: var(--info); background: rgba(0, 180, 255, 0.15);">
+                    ZELLO: OFFLINE
+                </div>
+                <div class="clock" id="clock" style="font-size: 12px; color: var(--text-dim);">00:00:00 Z</div>
+            </div>
+        </div>
+        
+        <!-- Left Panel - Ballistics Control -->
+        <div id="panel-left" class="panel">
+            <div class="panel-header">
+                <span>🎯 CONTROL DE FUEGO 12-DOF</span>
+                <button class="toggle-btn" onclick="togglePanel('panel-left')">MIN/MAX</button>
+            </div>
+            <div class="panel-body">
+                <div class="control-group">
+                    <label class="hud-label">Plataforma:</label>
+                    <select id="calibre-select" onchange="initAmmoConfig()">
+                        <option value="155">OBÚS 155mm (M198/M107)</option>
+                        <option value="105">OBÚS 105mm (M102)</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label class="hud-label">Proyectil:</label>
+                    <select id="ammo-select" onchange="initChargeConfig()"></select>
+                </div>
+                <div class="control-group">
+                    <label class="hud-label">Carga Propulsora:</label>
+                    <select id="charge-select" onchange="updateBallistics()"></select>
+                </div>
+                
+                <div class="control-group">
+                    <div class="flex gap-2">
+                        <div class="w-1/2">
+                            <label class="hud-label">Elevación (°):</label>
+                            <input type="number" id="angle-num" value="45" step="0.1" onchange="syncSlider(this.value)">
+                        </div>
+                        <div class="w-1/2">
+                            <label class="hud-label">V0 (m/s):</label>
+                            <div id="v0-display" class="bg-black p-2 text-white border border-green-900 text-center rounded">--</div>
+                        </div>
+                    </div>
+                    <input type="range" id="angle-input" min="5" max="85" value="45" class="w-full mt-2 accent-green-500" oninput="syncNum(this.value)">
+                </div>
+                
+                <div class="control-group">
+                    <label class="hud-label" style="color: var(--purple);">✨ IA TÁCTICA GEMINI</label>
+                    <textarea id="ai-input" placeholder="Describe objetivo táctico..." class="h-16 mb-2" rows="3"></textarea>
+                    <div class="grid grid-cols-2 gap-2 mb-2">
+                        <button class="btn btn-ai" onclick="generateMission()">ESCENARIO</button>
+                        <button class="btn btn-ai" onclick="analyzeWeather()">METEOROLOGÍA</button>
+                    </div>
+                    <button class="btn btn-ai w-full mb-2" onclick="askGeminiStrategy()">CALCULAR SOLUCIÓN</button>
+                </div>
+                
+                <button class="btn btn-fire" onclick="fireProjectile()">🔥 EJECUTAR DISPARO</button>
+                
+                <div id="ai-console" class="mt-3 p-3 bg-black bg-opacity-50 border border-purple-900 rounded text-xs text-purple-200 hidden max-h-40 overflow-y-auto"></div>
+            </div>
+        </div>
+        
+        <!-- Right Panel - Communications & AI Chat -->
+        <div id="panel-right" class="panel">
+            <div class="panel-header">
+                <span>💬 COMMS & IA ASSISTANT</span>
+                <button class="toggle-btn" onclick="togglePanel('panel-right')">MIN/MAX</button>
+            </div>
+            <div class="panel-body chat-section">
+                <!-- Chat Messages -->
+                <div class="chat-messages" id="chatMessages">
+                    <div class="chat-message system">
+                        <strong>SISTEMA</strong><br>
+                        SANTA BÁRBARA C2 inicializado. Protocolos EDXL-CAP y STANAG 4607 activos.<br>
+                        Conectando a red táctica...
+                    </div>
+                </div>
+                
+                <!-- Network Status -->
+                <div class="mb-3">
+                    <label class="hud-label">NODOS DE RED</label>
+                    <div class="network-grid">
+                        <div class="network-node active" id="node-cp">CP<br>ONLINE</div>
+                        <div class="network-node active" id="node-fo1">FO1<br>ONLINE</div>
+                        <div class="network-node inactive" id="node-fo2">FO2<br>OFFLINE</div>
+                        <div class="network-node active" id="node-bat1">BAT1<br>READY</div>
+                        <div class="network-node active" id="node-bat2">BAT2<br>FIRING</div>
+                        <div class="network-node active" id="node-log">LOG<br>ONLINE</div>
+                    </div>
+                </div>
+                
+                <!-- PTT Button -->
+                <div class="mb-3 text-center">
+                    <button class="ptt-button" id="pttBtn" onmousedown="startPTT()" onmouseup="stopPTT()" ontouchstart="startPTT()" ontouchend="stopPTT()">
+                        PUSH
+                        <span>TO TALK</span>
+                    </button>
+                    <div class="text-xs mt-2 text-green-400" id="ptt-status">Listo para transmitir</div>
+                </div>
+                
+                <!-- Chat Input -->
+                <div class="chat-input-area">
+                    <textarea id="chatInput" placeholder="Mensaje táctico encriptado..." rows="2" onkeypress="if(event.key==='Enter'&&!event.shiftKey){sendMessage();return false;}"></textarea>
+                    <button class="btn btn-secondary" onclick="sendMessage()">ENVIAR</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Bottom Panel - Telemetry -->
+        <div id="panel-bottom" class="panel">
+            <div class="panel-header">
+                <span>📊 TELEMETRÍA EN TIEMPO REAL</span>
+                <button class="toggle-btn" onclick="togglePanel('panel-bottom')">MIN/MAX</button>
+            </div>
+            <div class="panel-body">
+                <div class="telemetry-grid">
+                    <div class="telemetry-item">
+                        <div class="telemetry-label">ALCANCE (X)</div>
+                        <div class="telemetry-value" id="val-x">0 m</div>
+                    </div>
+                    <div class="telemetry-item">
+                        <div class="telemetry-label">ALTITUD (Y)</div>
+                        <div class="telemetry-value" id="val-y">0 m</div>
+                    </div>
+                    <div class="telemetry-item">
+                        <div class="telemetry-label">VELOCIDAD</div>
+                        <div class="telemetry-value" id="val-v">0 m/s</div>
+                    </div>
+                    <div class="telemetry-item">
+                        <div class="telemetry-label">ROTACIÓN</div>
+                        <div class="telemetry-value" id="val-att">0°/0°/0°</div>
+                    </div>
+                </div>
+                <div class="flex gap-2 mb-2">
+                    <button class="btn btn-secondary flex-1" onclick="setCameraMode('fixed')">VISTA FIJA</button>
+                    <button class="btn btn-secondary flex-1" onclick="setCameraMode('follow')">SEGUIMIENTO</button>
+                    <button class="btn btn-secondary flex-1" onclick="setCameraMode('god')">OJO DE DIOS</button>
+                </div>
+                <div id="weather-display" class="hidden p-2 bg-blue-900 bg-opacity-20 border border-blue-700 rounded text-xs text-blue-300">
+                    <strong>ATMÓSFERA:</strong> <span id="weather-text">Normal</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+// ============================================
+// CONFIGURACIÓN TÉCNICA
+// ============================================
+const API_KEY = ""; // Configurar clave Gemini si está disponible
+
+const weaponsData = {
+    "155": {
+        ammo: [
+            { id: "HE_M106", name: "155mm HE M106", mass: 43.2, hera: false },
+            { id: "HERA_M549A1", name: "155mm HERA M549A1", mass: 43.5, hera: true },
+            { id: "RAAM_M718", name: "155mm RAAM LM718A1", mass: 46.7, hera: false },
+            { id: "ILLUM_M485", name: "155mm ILLUM M485", mass: 41.7, hera: false }
+        ],
+        charges: [
+            { name: "GB M3A1 (6km)", v0: 375 },
+            { name: "WB M4A2 (18km)", v0: 565 },
+            { name: "WB M119A2 (30km)", v0: 790 },
+            { name: "RB M203 (30km+)", v0: 827 }
+        ]
+    },
+    "105": {
+        ammo: [
+            { id: "HE_M1", name: "105mm HE M1", mass: 14.9, hera: false },
+            { id: "ILLUM_M314", name: "105mm ILLUM M314/A3", mass: 14.5, hera: false },
+            { id: "SMOKE_HC", name: "105mm SMOKE HC", mass: 15.1, hera: false }
+        ],
+        charges: Array.from({length: 7}, (_, i) => ({ name: `Carga ${i+1}`, v0: 200 + (i * 50) }))
+    }
+};
+
+// Estado del Sistema
+let scene, camera, renderer, controls, clock;
+let cannon, projectile, trail, worldGrid;
+let isFlying = false;
+let state = new Float64Array(12);
+let pathPoints = [];
+let cameraMode = 'fixed';
+let currentV0 = 0;
+let activeAmmo = null;
+let heraActive = false;
+let maxAltitude = 0;
+let windVector = { x: 0, z: 0 };
+let isRecording = false;
+let chatHistory = [];
+
+// ============================================
+// MOTOR GRÁFICO THREE.JS
+// ============================================
+function init() {
+    const container = document.getElementById('canvas-container');
+    
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x020305);
+    scene.fog = new THREE.FogExp2(0x020305, 0.00004);
+
+    camera = new THREE.PerspectiveCamera(65, window.innerWidth/window.innerHeight, 1, 500000);
+    camera.position.set(50, 30, 50);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    container.appendChild(renderer.domElement);
+
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    clock = new THREE.Clock();
+
+    // Iluminación
+    scene.add(new THREE.AmbientLight(0x444444));
+    const sun = new THREE.DirectionalLight(0xffffff, 1);
+    sun.position.set(100, 500, 100);
+    scene.add(sun);
+
+    // Grid táctico
+    worldGrid = new THREE.GridHelper(400000, 100, 0x00ff00, 0x051505);
+    scene.add(worldGrid);
+
+    // Cañón
+    cannon = new THREE.Group();
+    const bGeo = new THREE.CylinderGeometry(0.5, 0.8, 10, 16);
+    const bMat = new THREE.MeshPhongMaterial({ color: 0x1a2a1a });
+    const barrel = new THREE.Mesh(bGeo, bMat);
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.z = 5;
+    cannon.add(barrel);
+    scene.add(cannon);
+
+    // Proyectil
+    const pGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.8, 8);
+    const pMat = new THREE.MeshPhongMaterial({ color: 0xffaa00 });
+    projectile = new THREE.Mesh(pGeo, pMat);
+    projectile.visible = false;
+    scene.add(projectile);
+
+    // Trayectoria
+    trail = new THREE.Line(
+        new THREE.BufferGeometry(),
+        new THREE.LineBasicMaterial({ color: 0x3dff3d, transparent: true, opacity: 0.4 })
+    );
+    scene.add(trail);
+
+    // Event listeners
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    initAmmoConfig();
+    startClock();
+    simulateNetworkActivity();
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    const dt = clock.getDelta();
+    
+    if(isFlying) {
+        for(let i=0; i<5; i++) solvePhysics(dt/5);
+        
+        projectile.position.set(state[0], state[1], state[2]);
+        projectile.rotation.set(state[6], state[7], state[8]);
+        pathPoints.push(projectile.position.clone());
+        
+        if(pathPoints.length % 5 === 0) {
+            trail.geometry.setFromPoints(pathPoints);
+        }
+
+        // Actualizar telemetría
+        document.getElementById('val-x').innerText = state[2].toFixed(0) + " m";
+        document.getElementById('val-y').innerText = state[1].toFixed(0) + " m";
+        const speed = Math.sqrt(state[3]**2+state[4]**2+state[5]**2);
+        document.getElementById('val-v').innerText = speed.toFixed(1) + " m/s";
+        document.getElementById('val-att').innerText = 
+            `${(state[6]*57.3).toFixed(1)}° / ${(state[8]*57.3).toFixed(0)}°`;
+
+        // Cámara
+        if(cameraMode === 'follow') {
+            camera.position.lerp(
+                new THREE.Vector3(state[0]+20, state[1]+10, state[2]-30), 
+                0.1
+            );
+            controls.target.copy(projectile.position);
+        } else if(cameraMode === 'god') {
+            const height = state[1] < 1000 ? 3000 : state[1]*1.2;
+            camera.position.set(state[0], state[1] + height, state[2]);
+            controls.target.copy(projectile.position);
+        }
+
+        // Impacto
+        if(state[1] < 0 && state[4] < 0) {
+            isFlying = false;
+            analyzeImpactReport();
+        }
+    }
+
+    controls.update();
+    renderer.render(scene, camera);
+}
+
+// ============================================
+// FÍSICA BALÍSTICA 12-DOF
+// ============================================
+function solvePhysics(dt) {
+    const g = 9.80665;
+    const speed = Math.sqrt(state[3]**2 + state[4]**2 + state[5]**2);
+    
+    if(speed < 1 && state[1] < 0) return;
+
+    // Atmósfera
+    const rho = 1.225 * Math.exp(-state[1]/8500);
+    const area = Math.PI * (0.077**2);
+    const drag = 0.5 * rho * speed * speed * 0.22 * area;
+    const accDrag = drag / activeAmmo.mass;
+
+    // Ecuaciones de movimiento
+    state[3] -= (state[3]/speed) * accDrag * dt;
+    state[4] -= ((state[4]/speed) * accDrag + g) * dt;
+    state[5] -= (state[5]/speed) * accDrag * dt;
+
+    // Viento
+    state[3] += windVector.x * 0.01 * dt;
+    state[5] += windVector.z * 0.01 * dt;
+
+    // HERA rocket assist
+    if(heraActive && clock.getElapsedTime() < 12) {
+        const thrust = 1300 / activeAmmo.mass;
+        state[4] += (state[4]/speed) * thrust * dt;
+        state[5] += (state[5]/speed) * thrust * dt;
+    }
+
+    // Posición
+    state[0] += state[3] * dt;
+    state[1] += state[4] * dt;
+    state[2] += state[5] * dt;
+    
+    if(state[1] > maxAltitude) maxAltitude = state[1];
+
+    // Actitud
+    state[6] = -Math.atan2(state[4], state[5]);
+    state[8] += state[11] * dt;
+}
+
+// ============================================
+// INTEGRACIÓN IA GEMINI
+// ============================================
+async function callGemini(prompt, systemPrompt = "", useTTS = false) {
+    if(!API_KEY) {
+        return simulateAIResponse(prompt, systemPrompt);
+    }
+    
+    try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
+        const payload = {
+            contents: [{ parts: [{ text: prompt }] }],
+            systemInstruction: { parts: [{ text: systemPrompt }] }
+        };
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const result = await response.json();
+        return result.candidates?.[0]?.content?.parts?.[0]?.text || "Sin respuesta de IA.";
+    } catch(e) {
+        console.error("Gemini API error:", e);
+        return simulateAIResponse(prompt, systemPrompt);
+    }
+}
+
+function simulateAIResponse(prompt, systemPrompt) {
+    // Simulación de respuestas IA cuando no hay API key
+    const responses = {
+        escenario: [
+            "🎯 OBJETIVO IDENTIFICADO: Búnker enemigo a 18.5km\nCOORDENADAS: NK 472 815\nPRIORIDAD: URGENTE\nRECOMENDACIÓN: 3 RDS HE, Carga WB M119A2, Elevación 52°",
+            "⚠️ ALERTA TÁCTICA: Movimiento de blindados detectado\nDISTANCIA: 22km\nTIPO: Columna mecanizada\nSOLUCIÓN: Solicitar fuego de supresión inmediata",
+            "📍 DESIGNACIÓN: Puesto de mando móvil\nGRID: NK 458 792\nMOVIMIENTO: Norte a 35 km/h\nRECOMENDACIÓN: Intercepción con 6 RDS"
+        ],
+        meteorologia: [
+            "🌤️ CONDICIONES ATMOSFÉRICAS:\nVIENTO: 12 m/s NO (285°)\nDENSIDAD AIRE: 1.198 kg/m³\nTEMPERATURA: 18°C\nCORRECCIÓN: +2.3 mils elevación",
+            "⛈️ ALERTA METEOROLÓGICA:\nVIENTO CRUZADO: 18 m/s\nVISIBILIDAD: REDUCIDA\nRECOMENDACIÓN: Retrasar disparo 15 minutos"
+        ],
+        estrategia: [
+            "💡 SOLUCIÓN DE TIRO ÓPTIMA:\nCARGA: WB M119A2 (790 m/s)\nELEVACIÓN: 52.3°\nAZIMUT: 347°\nRDS: 3 HE\nTIEMPO VUELO: 42s\nCEP: 18m",
+            "🎯 ANÁLISIS TÁCTICO:\nObjetivo endurecido requiere impacto directo.\nRecomiendo ángulo 65° para penetración vertical.\nCarga RB M203 máxima."
+        ]
+    };
+    
+    const p = prompt.toLowerCase();
+    if(p.includes('escenario') || p.includes('misión')) {
+        return responses.escenario[Math.floor(Math.random() * responses.escenario.length)];
+    } else if(p.includes('meteorología') || p.includes('viento') || p.includes('clima')) {
+        return responses.meteorologia[Math.floor(Math.random() * responses.meteorologia.length)];
+    } else {
+        return responses.estrategia[Math.floor(Math.random() * responses.estrategia.length)];
+    }
+}
+
+async function generateMission() {
+    const consoleEl = document.getElementById('ai-console');
+    consoleEl.classList.remove('hidden');
+    consoleEl.innerHTML = "<span class='loading-dots'>Generando escenario táctico</span>";
+    
+    const response = await callGemini(
+        "Genera un escenario de misión corto para artillería. Incluye distancia, tipo de fortificación y urgencia.",
+        "Eres un Comandante de Artillería dando órdenes concisas."
+    );
+    
+    consoleEl.innerText = response;
+    document.getElementById('ai-input').value = response;
+    addChatMessage('system', `📋 MISIÓN GENERADA:\n${response}`);
+}
+
+async function analyzeWeather() {
+    const consoleEl = document.getElementById('ai-console');
+    consoleEl.classList.remove('hidden');
+    consoleEl.innerHTML = "<span class='loading-dots'>Analizando condiciones atmosféricas</span>";
+    
+    const response = await callGemini(
+        "Inventa condiciones de viento y densidad del aire. Explica cómo afectarán a un proyectil de 155mm.",
+        "Eres un meteorólogo militar."
+    );
+    
+    consoleEl.innerText = response;
+    
+    // Simulación técnica
+    windVector.x = (Math.random() - 0.5) * 20;
+    windVector.z = (Math.random() - 0.5) * 20;
+    
+    document.getElementById('weather-display').classList.remove('hidden');
+    document.getElementById('weather-text').innerText = 
+        `Viento: ${windVector.x.toFixed(1)}m/s Lat, ${windVector.z.toFixed(1)}m/s Long`;
+    
+    addChatMessage('system', `🌤️ METEOROLOGÍA:\n${response}`);
+}
+
+async function askGeminiStrategy() {
+    const input = document.getElementById('ai-input').value;
+    if(!input) {
+        addChatMessage('system', '⚠️ Ingrese descripción del objetivo primero.');
+        return;
+    }
+    
+    const consoleEl = document.getElementById('ai-console');
+    consoleEl.classList.remove('hidden');
+    consoleEl.innerHTML = "<span class='loading-dots'>Calculando solución de tiro</span>";
+
+    const response = await callGemini(
+        `OBJETIVO: ${input}. Calcule carga, elevación y azimut óptimos.`,
+        "Eres un Estratega de Fuego. Responde con datos técnicos precisos."
+    );
+    
+    consoleEl.innerText = response;
+    addChatMessage('ai', `💡 ESTRATEGIA IA:\n${response}`);
+    
+    // Auto-configurar si es posible
+    if(response.includes('52')) {
+        document.getElementById('angle-num').value = 52;
+        syncSlider(52);
+    }
+}
+
+async function analyzeImpactReport() {
+    const consoleEl = document.getElementById('ai-console');
+    consoleEl.classList.remove('hidden');
+    consoleEl.innerHTML = "<span class='loading-dots'>Generando BDA</span>";
+
+    const stats = {
+        distancia: state[2].toFixed(0),
+        apogeo: maxAltitude.toFixed(0),
+        proyectil: activeAmmo.name
+    };
+    
+    const response = await callGemini(
+        `Reporte de impacto: Distancia ${stats.distancia}m, Apogeo ${stats.apogeo}m, Proyectil ${stats.proyectil}.`,
+        "Observador avanzado informando resultados de impacto."
+    );
+    
+    consoleEl.innerText = response;
+    addChatMessage('system', `📊 BDA:\n${response}`);
+}
+
+// ============================================
+// SISTEMA DE COMUNICACIONES
+// ============================================
+function addChatMessage(type, content) {
+    const chatDiv = document.getElementById('chatMessages');
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `chat-message ${type}`;
+    
+    const timestamp = new Date().toISOString().split('T')[1].split('.')[0] + 'Z';
+    const labels = { user: 'OPERADOR', ai: 'IA ASISTANT', system: 'SISTEMA' };
+    
+    msgDiv.innerHTML = `<strong>${labels[type] || 'UNKNOWN'} [${timestamp}]</strong><br>${content.replace(/\n/g, '<br>')}`;
+    chatDiv.appendChild(msgDiv);
+    chatDiv.scrollTop = chatDiv.scrollHeight;
+    
+    chatHistory.push({ type, content, timestamp });
+}
+
+function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const txt = input.value.trim();
+    if(!txt) return;
+    
+    addChatMessage('user', txt);
+    input.value = '';
+    
+    // Simular envío a red táctica
+    setTimeout(() => {
+        const responses = [
+            "✓ Mensaje recibido por CP",
+            "📡 Transmitiendo a BAT1...",
+            "🔐 Mensaje encriptado AES-256",
+            "⚡ Prioridad: ROUTINE"
+        ];
+        addChatMessage('system', responses[Math.floor(Math.random() * responses.length)]);
+    }, 500);
+}
+
+// PTT (Push-to-Talk)
+function startPTT() {
+    if(isRecording) return;
+    
+    isRecording = true;
+    const btn = document.getElementById('pttBtn');
+    const status = document.getElementById('ptt-status');
+    
+    btn.classList.add('recording');
+    status.innerText = "🔴 TRANSMITIENDO...";
+    status.style.color = "#ff3b3b";
+    
+    addChatMessage('system', '🎤 PTT ACTIVADO - Canal abierto');
+    
+    // Simular grabación
+    setTimeout(() => {
+        if(isRecording) {
+            addChatMessage('system', '📡 Audio codificando Opus...');
+        }
+    }, 1000);
+}
+
+function stopPTT() {
+    if(!isRecording) return;
+    
+    isRecording = false;
+    const btn = document.getElementById('pttBtn');
+    const status = document.getElementById('ptt-status');
+    
+    btn.classList.remove('recording');
+    status.innerText = "✓ Transmisión completada";
+    status.style.color = "#3dff3d";
+    
+    addChatMessage('system', '📤 Audio enviado al canal (2.4s)');
+    
+    setTimeout(() => {
+        status.innerText = "Listo para transmitir";
+    }, 2000);
+}
+
+// Simulación de actividad de red
+function simulateNetworkActivity() {
+    setInterval(() => {
+        const nodes = ['node-cp', 'node-fo1', 'node-fo2', 'node-bat1', 'node-bat2', 'node-log'];
+        const randomNode = nodes[Math.floor(Math.random() * nodes.length)];
+        const node = document.getElementById(randomNode);
+        
+        if(Math.random() > 0.7) {
+            node.classList.toggle('active');
+            node.classList.toggle('inactive');
+            
+            const status = node.classList.contains('active') ? 'ONLINE' : 'OFFLINE';
+            const label = randomNode.replace('node-', '').toUpperCase();
+            node.innerHTML = `${label}<br>${status}`;
+            
+            addChatMessage('system', `📡 ${label}: ${status}`);
+        }
+    }, 8000);
+}
+
+// ============================================
+// CONTROLES DE UI
+// ============================================
+function initAmmoConfig() {
+    const cal = document.getElementById('calibre-select').value;
+    const ammoSel = document.getElementById('ammo-select');
+    ammoSel.innerHTML = "";
+    
+    weaponsData[cal].ammo.forEach(a => {
+        const opt = document.createElement('option');
+        opt.value = a.id;
+        opt.innerText = a.name;
+        ammoSel.appendChild(opt);
+    });
+    
+    initChargeConfig();
+}
+
+function initChargeConfig() {
+    const cal = document.getElementById('calibre-select').value;
+    const chargeSel = document.getElementById('charge-select');
+    chargeSel.innerHTML = "";
+    
+    weaponsData[cal].charges.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.v0;
+        opt.innerText = c.name;
+        chargeSel.appendChild(opt);
+    });
+    
+    updateBallistics();
+}
+
+function updateBallistics() {
+    currentV0 = parseFloat(document.getElementById('charge-select').value);
+    document.getElementById('v0-display').innerText = currentV0 + " m/s";
+}
+
+function togglePanel(id) {
+    document.getElementById(id).classList.toggle('panel-collapsed');
+}
+
+function syncSlider(v) {
+    document.getElementById('angle-input').value = v;
+    updateCannon();
+}
+
+function syncNum(v) {
+    document.getElementById('angle-num').value = v;
+    updateCannon();
+}
+
+function updateCannon() {
+    const ang = parseFloat(document.getElementById('angle-num').value);
+    cannon.rotation.x = -THREE.MathUtils.degToRad(ang);
+}
+
+function setCameraMode(mode) {
+    cameraMode = mode;
+    if(mode === 'fixed') {
+        camera.position.set(50, 30, 50);
+        controls.target.set(0, 0, 0);
+    }
+}
+
+function fireProjectile() {
+    if(isFlying) return;
+    
+    const ang = parseFloat(document.getElementById('angle-num').value);
+    const rad = THREE.MathUtils.degToRad(ang);
+    const cal = document.getElementById('calibre-select').value;
+    const ammoId = document.getElementById('ammo-select').value;
+    
+    activeAmmo = weaponsData[cal].ammo.find(a => a.id === ammoId);
+    heraActive = activeAmmo.hera;
+
+    state.fill(0);
+    state[4] = currentV0 * Math.sin(rad);
+    state[5] = currentV0 * Math.cos(rad);
+    state[6] = -rad;
+    state[11] = 250;
+    
+    isFlying = true;
+    maxAltitude = 0;
+    projectile.visible = true;
+    pathPoints = [new THREE.Vector3(0, 0, 0)];
+    document.getElementById('ai-console').classList.add('hidden');
+    
+    addChatMessage('system', `🔥 DISPARO EJECUTADO\nProyectil: ${activeAmmo.name}\nV0: ${currentV0} m/s\nElevación: ${ang}°`);
+}
+
+function startClock() {
+    setInterval(() => {
+        const now = new Date();
+        document.getElementById('clock').textContent = 
+            now.toISOString().split('T')[1].split('.')[0] + ' Z';
+    }, 1000);
+}
+
+// ============================================
+// INICIALIZACIÓN
+// ============================================
+window.addEventListener('DOMContentLoaded', () => {
+    init();
+    animate();
+    addChatMessage('system', '✅ SISTEMA LISTO\n- Motor balístico 12-DOF activo\n- IA táctica Gemini integrada\n- Canal PTT disponible\n- Red táctica: 5/6 nodos online');
+});
+</script>
+</body>
+</html>
